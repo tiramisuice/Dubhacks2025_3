@@ -1,0 +1,31 @@
+# Core FastAPI and server
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# HTTP and requests
+requests==2.31.0
+python-multipart==0.0.6
+
+# Computer vision and pose detection
+mediapipe==0.10.8
+opencv-python==4.8.1.78
+numpy==1.26.2
+pillow==10.1.0
+
+# AI and LLM
+openai==1.3.5
+
+# Configuration and data
+python-dotenv==1.0.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# WebSocket support
+websockets==12.0
+
+# Time series analysis for pose comparison
+dtaidistance==2.3.10
+
+# Note: simpleaudio and pydub are optional for audio features
+# They require Visual C++ Build Tools on Windows
+# Install them separately if needed: pip install simpleaudio pydub
