@@ -13,6 +13,7 @@ import { PracticeControlBar } from '../components/PracticeControlBar';
 import { useSnapshotCapture } from '../hooks/useSnapshotCapture';
 import { useDualSnapshot } from '../hooks/useDualSnapshot';
 import { mockFeedbackService, MockFeedbackResponse } from '../services/mockFeedbackService';
+import { mediapipeService, MediaPipeResponse } from '../services/mediapipeService';
 
 interface EnhancedPracticePageProps {
   routineId: string;
@@ -36,11 +37,17 @@ export function EnhancedPracticePage({ routineId, onReview, onSettings }: Enhanc
   const [mirrorVideo, setMirrorVideo] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
-  const [currentFeedback, setCurrentFeedback] = useState<MockFeedbackResponse | null>(null);
-  const [overallAccuracy, setOverallAccuracy] = useState(82);
+  const [, setCurrentFeedback] = useState<MockFeedbackResponse | null>(null);
+  const [overallAccuracy, setOverallAccuracy] = useState(62);
   const [showCongratulations, setShowCongratulations] = useState(false);
   const [videoEnded, setVideoEnded] = useState(false);
   const [autoNavigateCountdown, setAutoNavigateCountdown] = useState(5);
+
+  // MediaPipe state
+  const [mediaPipeActive, setMediaPipeActive] = useState(false);
+  const [mediaPipeResult, setMediaPipeResult] = useState<MediaPipeResponse | null>(null);
+  const [mediaPipeError, setMediaPipeError] = useState<string | null>(null);
+  const [mediaPipeProcessing, setMediaPipeProcessing] = useState(false);
 
   // Video reference
   const videoSrc = `/src/data/${routine?.title.toLowerCase()}.mp4`; // Video files in frontend/src/data
@@ -82,6 +89,20 @@ export function EnhancedPracticePage({ routineId, onReview, onSettings }: Enhanc
       if (videoDuration > 0 && time >= videoDuration - 0.1 && !videoEnded) {
         handleVideoEnd();
       }
+    }
+  };
+
+  // Handle MediaPipe toggle
+  const handleMediaPipeToggle = () => {
+    const newState = !mediaPipeActive;
+    setMediaPipeActive(newState);
+    setMediaPipeError(null);
+    
+    if (newState) {
+      console.log('[MediaPipe] Activating MediaPipe analysis');
+    } else {
+      console.log('[MediaPipe] Deactivating MediaPipe analysis');
+      setMediaPipeResult(null);
     }
   };
 
@@ -164,17 +185,13 @@ export function EnhancedPracticePage({ routineId, onReview, onSettings }: Enhanc
 
   // Use dual snapshot hook for GPT-4o analysis
   const {
-    isCapturing: isDualCapturing,
     hasVideoElement,
     currentFeedback: dualFeedback,
-    feedbackHistory,
     error: dualError,
     startCapture: startDualCapture,
-    stopCapture: stopDualCapture,
     pauseCapture: pauseDualCapture,
     resumeCapture: resumeDualCapture,
-    setVideoElement,
-    clearFeedbackHistory
+    setVideoElement
   } = useDualSnapshot({
     sessionId: `session_${routineId}`,
     referenceVideoPath: backendVideoPath,
@@ -195,6 +212,65 @@ export function EnhancedPracticePage({ routineId, onReview, onSettings }: Enhanc
       }
     }
   }, [dualFeedback]);
+
+  // MediaPipe analysis effect - runs independently
+  useEffect(() => {
+    if (!mediaPipeActive || !isPlaying) {
+      return;
+    }
+
+    // Run MediaPipe analysis on interval
+    const runMediaPipeAnalysis = async () => {
+      if (mediaPipeProcessing) {
+        console.log('[MediaPipe] Skipping analysis - already processing');
+        return;
+      }
+      
+      setMediaPipeProcessing(true);
+      try {
+        // Get current webcam frame from the camera
+        const webcamElement = document.querySelector('video[autoplay]') as HTMLVideoElement;
+        if (!webcamElement) {
+          console.log('[MediaPipe] No webcam element found');
+          return;
+        }
+        
+        const userImage = mediapipeService.videoFrameToBase64(webcamElement, 0.5); // Lower quality for better performance
+        
+        // Use a placeholder for reference image to reduce processing
+        const referenceImage = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k=';
+        
+        // Run MediaPipe analysis (focus on user only)
+        const result = await mediapipeService.analyzePoses(
+          userImage,
+          referenceImage,
+          videoCurrentTime,
+          true // Draw landmarks
+        );
+        
+        setMediaPipeResult(result);
+        setMediaPipeError(null);
+        
+        console.log('[MediaPipe] Analysis complete:', {
+          user_pose: result.user_pose_detected,
+          reference_pose: result.reference_pose_detected,
+          similarity: result.similarity_score
+        });
+        
+      } catch (error) {
+        console.error('[MediaPipe] Analysis failed:', error);
+        setMediaPipeError(error instanceof Error ? error.message : 'Unknown error');
+      } finally {
+        setMediaPipeProcessing(false);
+      }
+    };
+
+    // Run analysis immediately and then on interval
+    runMediaPipeAnalysis();
+    const intervalId = setInterval(runMediaPipeAnalysis, 5000); // Run every 5 seconds to reduce lag
+    
+    return () => clearInterval(intervalId);
+  }, [mediaPipeActive, isPlaying, videoCurrentTime]);
 
   // Handle camera snapshot - now using dual snapshot system
   const handleSnapshot = async (snapshot: string) => {
@@ -552,6 +628,8 @@ export function EnhancedPracticePage({ routineId, onReview, onSettings }: Enhanc
                   snapshotInterval={500}
                   showMirrorButton={true}
                   mirrorButtonPosition="top-right"
+                  mediaPipeResult={mediaPipeResult}
+                  mediaPipeActive={mediaPipeActive}
                 />
               </div>
               <div aria-hidden="true" className="absolute border-[0.8px] border-[rgba(255,255,255,0.05)] border-solid inset-0 pointer-events-none rounded-[10px]" />
@@ -565,6 +643,8 @@ export function EnhancedPracticePage({ routineId, onReview, onSettings }: Enhanc
                 isPlaying={isPlaying}
                 dualFeedback={dualFeedback}
                 dualError={dualError}
+                mediaPipeResult={mediaPipeResult}
+                mediaPipeError={mediaPipeError}
               />
               <div aria-hidden="true" className="absolute border-[0.8px] border-[rgba(255,255,255,0.05)] border-solid inset-0 pointer-events-none rounded-[10px]" />
             </div>
@@ -592,12 +672,14 @@ export function EnhancedPracticePage({ routineId, onReview, onSettings }: Enhanc
                     setVideoCurrentTime(newTime);
                     setIsPlaying(false);
                     setCurrentFeedback(null);
-                    setOverallAccuracy(82);
+                    setOverallAccuracy(62);
                   }}
                   playbackRate={playbackRate}
                   mirror={mirrorVideo}
                   showSkeleton={showSkeleton}
                   className="w-full h-full"
+                  mediaPipeResult={null}
+                  mediaPipeActive={false}
                 />
 
                 {/* Reference Video Mirror Button */}
@@ -638,7 +720,7 @@ export function EnhancedPracticePage({ routineId, onReview, onSettings }: Enhanc
                 
                 // Reset feedback
                 setCurrentFeedback(null);
-                setOverallAccuracy(82);
+                setOverallAccuracy(62);
                 
                 // Stop capture temporarily
                 stopAutoCapture();
@@ -650,10 +732,12 @@ export function EnhancedPracticePage({ routineId, onReview, onSettings }: Enhanc
                 }, 5000);
               }}
               onSettings={onSettings}
+              onMediaPipe={handleMediaPipeToggle}
               fps={30}
               warnings={[]}
               playbackRate={playbackRate}
               onPlaybackRateChange={setPlaybackRate}
+              mediaPipeActive={mediaPipeActive}
             />
           </div>
         </div>

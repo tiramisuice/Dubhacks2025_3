@@ -25,6 +25,7 @@ from app.services.angle_calculator import AngleCalculator
 from app.services.scoring import ScoringService
 from app.services.feedback_generation import FeedbackGenerationService
 from app.services.dual_snapshot_service import dual_snapshot_service, DualSnapshotData
+from app.services.mediapipe_service import mediapipe_service, MediaPipeResult
 
 # Import MediaPipe for pose detection
 import mediapipe as mp
@@ -165,6 +166,31 @@ class DualSnapshotResponse(BaseModel):
     trend_analysis: Optional[str] = None
     key_improvements: Optional[List[str]] = None
     encouragement: Optional[str] = None
+    error: Optional[str] = None
+
+
+class MediaPipeRequest(BaseModel):
+    """Request model for MediaPipe pose detection."""
+    user_image: str  # base64 encoded user webcam image
+    reference_image: str  # base64 encoded reference video frame
+    timestamp: Optional[float] = None
+    draw_landmarks: Optional[bool] = False
+
+
+class MediaPipeResponse(BaseModel):
+    """Response model for MediaPipe pose detection."""
+    timestamp: float
+    user_pose_detected: bool
+    reference_pose_detected: bool
+    similarity_score: float
+    processing_time: float
+    user_landmarks: Optional[List[List[float]]] = None
+    reference_landmarks: Optional[List[List[float]]] = None
+    user_analysis: Optional[Dict[str, Any]] = None
+    reference_analysis: Optional[Dict[str, Any]] = None
+    user_image_with_landmarks: Optional[str] = None  # base64 encoded image with drawn landmarks
+    reference_image_with_landmarks: Optional[str] = None  # base64 encoded image with drawn landmarks
+    success: bool
     error: Optional[str] = None
 
 
@@ -761,6 +787,89 @@ async def process_dual_snapshot(request: DualSnapshotRequest):
             is_positive=False,
             specific_issues=["Processing error occurred"],
             recommendations=["Continue practicing and focus on the reference"],
+            success=False,
+            error=str(e)
+        )
+
+
+@app.post("/api/mediapipe/analyze", response_model=MediaPipeResponse)
+async def analyze_mediapipe_poses(request: MediaPipeRequest):
+    """
+    Analyze poses using MediaPipe on both user and reference images.
+    This endpoint provides detailed pose detection and comparison.
+    
+    Args:
+        request: MediaPipeRequest with user and reference images
+        
+    Returns:
+        MediaPipeResponse: Detailed pose analysis results
+    """
+    try:
+        if not request.user_image:
+            raise HTTPException(status_code=400, detail='No user image data provided')
+        
+        if not request.reference_image:
+            raise HTTPException(status_code=400, detail='No reference image data provided')
+
+        print(f"[MediaPipe API] Processing dual frames with timestamp: {request.timestamp}")
+        
+        # Process both images with MediaPipe
+        result = mediapipe_service.process_dual_frames(
+            user_image_b64=request.user_image,
+            reference_image_b64=request.reference_image,
+            timestamp=request.timestamp or time.time()
+        )
+        
+        if not result.success:
+            raise HTTPException(status_code=500, detail=result.error or "MediaPipe processing failed")
+        
+        # Build response data
+        response_data = {
+            "timestamp": result.user_pose.timestamp if result.user_pose else time.time(),
+            "user_pose_detected": result.user_pose.has_pose if result.user_pose else False,
+            "reference_pose_detected": result.reference_pose.has_pose if result.reference_pose else False,
+            "similarity_score": result.similarity_score,
+            "processing_time": result.processing_time,
+            "success": True
+        }
+        
+        # Add landmark data if poses were detected
+        if result.user_pose and result.user_pose.has_pose:
+            response_data["user_landmarks"] = result.user_pose.landmarks
+            response_data["user_analysis"] = mediapipe_service.get_pose_analysis(result.user_pose.landmarks)
+            
+            # Draw landmarks on user image if requested
+            if request.draw_landmarks:
+                response_data["user_image_with_landmarks"] = mediapipe_service.draw_pose_landmarks(
+                    request.user_image, result.user_pose.landmarks
+                )
+        
+        if result.reference_pose and result.reference_pose.has_pose:
+            response_data["reference_landmarks"] = result.reference_pose.landmarks
+            response_data["reference_analysis"] = mediapipe_service.get_pose_analysis(result.reference_pose.landmarks)
+            
+            # Draw landmarks on reference image if requested
+            if request.draw_landmarks:
+                response_data["reference_image_with_landmarks"] = mediapipe_service.draw_pose_landmarks(
+                    request.reference_image, result.reference_pose.landmarks
+                )
+        
+        print(f"[MediaPipe API] Analysis complete: user_pose={response_data['user_pose_detected']}, "
+              f"reference_pose={response_data['reference_pose_detected']}, "
+              f"similarity={response_data['similarity_score']:.3f}")
+        
+        return MediaPipeResponse(**response_data)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[MediaPipe API] Error in MediaPipe processing: {e}")
+        return MediaPipeResponse(
+            timestamp=time.time(),
+            user_pose_detected=False,
+            reference_pose_detected=False,
+            similarity_score=0.0,
+            processing_time=0.0,
             success=False,
             error=str(e)
         )

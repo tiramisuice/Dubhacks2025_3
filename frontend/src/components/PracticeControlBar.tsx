@@ -1,15 +1,17 @@
 import { Badge } from './ui/badge';
-import { Play, Pause, RotateCcw, Gauge, Settings } from 'lucide-react';
+import { Play, Pause, RotateCcw, Gauge, Settings, Activity } from 'lucide-react';
 
 interface PracticeControlBarProps {
   isPlaying: boolean;
   onPlayPause: () => void;
   onRestart: () => void;
   onSettings: () => void;
+  onMediaPipe?: () => void;
   fps?: number;
   warnings?: string[];
   playbackRate?: number;
   onPlaybackRateChange?: (rate: number) => void;
+  mediaPipeActive?: boolean;
 }
 
 export function PracticeControlBar({
@@ -17,10 +19,12 @@ export function PracticeControlBar({
   onPlayPause,
   onRestart,
   onSettings,
+  onMediaPipe,
   fps = 60,
   warnings = [],
   playbackRate = 1,
   onPlaybackRateChange,
+  mediaPipeActive = false,
 }: PracticeControlBarProps) {
 
   return (
@@ -58,8 +62,23 @@ export function PracticeControlBar({
           </button>
         </div>
 
-        {/* Center: Settings */}
+        {/* Center: MediaPipe & Settings */}
         <div className="flex items-center gap-3">
+          {/* MediaPipe Toggle */}
+          {onMediaPipe && (
+            <button
+              onClick={onMediaPipe}
+              className={`w-10 h-10 rounded-full flex items-center justify-center transition-all border ${
+                mediaPipeActive
+                  ? 'bg-gradient-to-br from-cyan-500 to-blue-500 border-cyan-400/50 shadow-lg shadow-cyan-500/25'
+                  : 'bg-white/5 hover:bg-white/10 border-white/10'
+              }`}
+              title={mediaPipeActive ? 'Disable MediaPipe Analysis' : 'Enable MediaPipe Analysis'}
+            >
+              <Activity className={`w-4 h-4 ${mediaPipeActive ? 'text-white' : 'text-gray-400'}`} />
+            </button>
+          )}
+
           {/* Settings */}
           <button
             onClick={onSettings}
@@ -77,6 +96,20 @@ export function PracticeControlBar({
           >
             {fps} FPS
           </Badge>
+
+          {/* MediaPipe Status */}
+          {onMediaPipe && (
+            <Badge
+              variant="outline"
+              className={`text-xs ${
+                mediaPipeActive
+                  ? 'border-cyan-500/30 text-cyan-400 bg-cyan-500/10'
+                  : 'border-gray-500/30 text-gray-400 bg-gray-500/10'
+              }`}
+            >
+              {mediaPipeActive ? 'MediaPipe ON' : 'MediaPipe OFF'}
+            </Badge>
+          )}
 
           {warnings.length === 0 ? (
             <Badge

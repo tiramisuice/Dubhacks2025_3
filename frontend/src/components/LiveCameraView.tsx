@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from './ui/button';
 import { RotateCcw, Camera, AlertCircle } from 'lucide-react';
+import { MediaPipeOverlay } from './MediaPipeOverlay';
+import { MediaPipeResponse } from '../services/mediapipeService';
 
 interface LiveCameraViewProps {
   className?: string;
@@ -9,6 +11,8 @@ interface LiveCameraViewProps {
   onSnapshot?: (snapshot: string) => void; // Callback for when snapshot is taken
   autoSnapshot?: boolean; // Auto-capture snapshots at intervals
   snapshotInterval?: number; // Interval in milliseconds (default 500ms)
+  mediaPipeResult?: MediaPipeResponse | null; // MediaPipe analysis results
+  mediaPipeActive?: boolean; // Whether MediaPipe overlay should be shown
 }
 
 export function LiveCameraView({ 
@@ -17,7 +21,9 @@ export function LiveCameraView({
   mirrorButtonPosition = 'top-right',
   onSnapshot,
   autoSnapshot = false,
-  snapshotInterval = 500
+  snapshotInterval = 500,
+  mediaPipeResult,
+  mediaPipeActive = false
 }: LiveCameraViewProps) {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
@@ -259,6 +265,13 @@ export function LiveCameraView({
           width: '100%',
           height: '100%'
         }}
+      />
+
+      {/* MediaPipe Overlay */}
+      <MediaPipeOverlay
+        videoRef={videoRef}
+        mediaPipeResult={mediaPipeResult}
+        isActive={mediaPipeActive && cameraReady}
       />
       
       {/* Mirror Camera Button */}

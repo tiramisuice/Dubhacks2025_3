@@ -375,6 +375,22 @@ class DualSnapshotService:
                     print(f"[DualSnapshot] Extracted similarity_score: {similarity_score}")
                     print(f"[DualSnapshot] Extracted severity: {severity}")
                     
+                    # Create and return the result immediately after JSON parsing
+                    feedback_result = DanceFeedbackResult(
+                        timestamp=snapshot_data.timestamp,
+                        feedback_text=feedback_text,
+                        severity=severity,
+                        focus_areas=focus_areas,
+                        similarity_score=similarity_score,
+                        is_positive=is_positive,
+                        specific_issues=specific_issues,
+                        recommendations=recommendations
+                    )
+                    
+                    print(f"[DualSnapshot] Created DanceFeedbackResult successfully")
+                    print(f"[DualSnapshot] Returning feedback_result: {feedback_result.feedback_text}")
+                    return feedback_result
+                    
                 else:
                     print(f"[DualSnapshot] No JSON found in response - using plain text")
                     raise ValueError("No JSON found in response")
@@ -416,18 +432,6 @@ class DualSnapshotService:
                     recommendations = ["Continue practicing", "Watch the reference video"]
                     positive_feedback = ""
             
-                feedback_result = DanceFeedbackResult(
-                    timestamp=snapshot_data.timestamp,
-                feedback_text=feedback_text,
-                severity=severity,
-                focus_areas=focus_areas,
-                similarity_score=similarity_score,
-                is_positive=is_positive,
-                specific_issues=specific_issues,
-                recommendations=recommendations
-                )
-                
-                return feedback_result
                 
         except Exception as e:
             print(f"[DualSnapshot] Error in OpenAI API call: {e}")
@@ -700,6 +704,12 @@ class DualSnapshotService:
         
         time_diff = video_timestamp - self.last_tier2_analysis
         print(f"[DualSnapshot] Tier 2 check: video_time={video_timestamp:.1f}s, last_tier2_time={self.last_tier2_analysis:.1f}s, time_diff={time_diff:.1f}s, interval={self.tier2_analysis_interval}s, results_count={len(self.tier1_results)}")
+        
+        # Reset last_tier2_analysis if video timestamp went backwards (video restarted/seeked)
+        if time_diff < 0:
+            print(f"[DualSnapshot] Video timestamp went backwards (time_diff={time_diff:.1f}s) - resetting last_tier2_analysis")
+            self.last_tier2_analysis = video_timestamp - self.tier2_analysis_interval  # Set to allow immediate analysis
+            time_diff = self.tier2_analysis_interval  # Force analysis on next check
         
         if (time_diff >= self.tier2_analysis_interval and 
             len(self.tier1_results) >= 6 and

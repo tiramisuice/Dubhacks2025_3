@@ -107,7 +107,7 @@ export function LearningModePage({ routineId, onBack, onReview }: LearningModePa
     return () => clearInterval(interval);
   }, [isPlaying, totalBeats]);
 
-  const overallAccuracy = 82;
+  const overallAccuracy = 62;
 
   const getTutorialForBeat = (beat: number) => {
     return tutorials.find(t => t.beat === beat);

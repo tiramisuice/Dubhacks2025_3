@@ -6,6 +6,8 @@
  */
 
 import React, { useRef, useEffect, useState } from 'react';
+import { ReferenceVideoOverlay } from './ReferenceVideoOverlay';
+import { MediaPipeResponse } from '../services/mediapipeService';
 
 interface VideoPlayerProps {
   videoSrc: string;
@@ -21,6 +23,8 @@ interface VideoPlayerProps {
   mirror?: boolean;
   showSkeleton?: boolean;
   className?: string;
+  mediaPipeResult?: MediaPipeResponse | null;
+  mediaPipeActive?: boolean;
 }
 
 export function VideoPlayer({
@@ -37,6 +41,8 @@ export function VideoPlayer({
   mirror = false,
   showSkeleton = false,
   className = '',
+  mediaPipeResult,
+  mediaPipeActive = false,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -132,6 +138,13 @@ export function VideoPlayer({
         onTimeUpdate={handleTimeUpdate}
         onError={handleError}
         onCanPlay={handleCanPlay}
+      />
+
+      {/* MediaPipe Overlay for Reference Video */}
+      <ReferenceVideoOverlay
+        videoRef={videoRef}
+        mediaPipeResult={mediaPipeResult}
+        isActive={mediaPipeActive && isLoaded}
       />
 
       {/* Skeleton Overlay */}

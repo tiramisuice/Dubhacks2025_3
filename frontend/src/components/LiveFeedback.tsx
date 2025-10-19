@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { PracticeTip } from '../types';
-import { motion, AnimatePresence } from 'motion/react';
-import { Flame, CheckCircle2, AlertCircle, Brain, Zap } from 'lucide-react';
+import { motion } from 'motion/react';
+import { Flame, CheckCircle2, AlertCircle, Activity } from 'lucide-react';
+import { MediaPipeResponse } from '../services/mediapipeService';
 
 interface DualFeedback {
   timestamp: number;
@@ -37,11 +38,21 @@ interface LiveFeedbackProps {
   isPlaying: boolean;
   dualFeedback?: DualFeedback | null;
   dualError?: Error | null;
+  mediaPipeResult?: MediaPipeResponse | null;
+  mediaPipeError?: string | null;
 }
 
-export function LiveFeedback({ overallAccuracy, currentTip, isPlaying, dualFeedback, dualError }: LiveFeedbackProps) {
+export function LiveFeedback({ overallAccuracy, isPlaying, dualFeedback, dualError, mediaPipeResult, mediaPipeError }: LiveFeedbackProps) {
   // Store the last Tier 2 feedback to prevent flickering
   const [lastTier2Feedback, setLastTier2Feedback] = useState<string | null>(null);
+
+  // Clear feedback when video is paused
+  useEffect(() => {
+    if (!isPlaying && lastTier2Feedback) {
+      console.log('[LiveFeedback] Video paused - clearing Tier 2 feedback');
+      setLastTier2Feedback(null);
+    }
+  }, [isPlaying, lastTier2Feedback]);
 
   // Only process and update when we have actual Tier 2 data
   useEffect(() => {
@@ -67,50 +78,8 @@ export function LiveFeedback({ overallAccuracy, currentTip, isPlaying, dualFeedb
 
   // Removed hardcoded feedback simulation - only show real AI feedback
 
-  const getAccuracyColor = () => {
-    if (overallAccuracy >= 80) return 'text-green-400';
-    if (overallAccuracy >= 60) return 'text-yellow-400';
-    return 'text-red-400';
-  };
-
-  const getAccuracyLabel = () => {
-    if (overallAccuracy >= 90) return 'Excellent!';
-    if (overallAccuracy >= 80) return 'Great!';
-    if (overallAccuracy >= 70) return 'Good';
-    if (overallAccuracy >= 60) return 'Keep going';
-    return 'Focus!';
-  };
-
   return (
     <div className="h-full flex flex-col py-6 px-4 bg-gradient-to-b from-[#0f1219] to-[#13161f]">
-      {/* Status Badge at Top */}
-      <div className="mb-8">
-        <div className="relative">
-          <div 
-            className={`text-center py-4 px-6 rounded-2xl border-2 ${
-              overallAccuracy >= 80 
-                ? 'bg-green-500/10 border-green-500/50' 
-                : overallAccuracy >= 60
-                ? 'bg-yellow-500/10 border-yellow-500/50'
-                : 'bg-red-500/10 border-red-500/50'
-            }`}
-            style={{
-              boxShadow: overallAccuracy >= 80 
-                ? '0 0 20px rgba(34, 197, 94, 0.2)' 
-                : overallAccuracy >= 60
-                ? '0 0 20px rgba(234, 179, 8, 0.2)'
-                : '0 0 20px rgba(239, 68, 68, 0.2)'
-            }}
-          >
-            <div className={`text-3xl mb-1 ${getAccuracyColor()}`}>
-              {Math.round(overallAccuracy)}%
-            </div>
-            <div className="text-xs text-gray-400 uppercase tracking-wider">
-              {getAccuracyLabel()}
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Live Feedback Messages */}
       <div className="flex-1 space-y-3 overflow-hidden">
@@ -140,6 +109,59 @@ export function LiveFeedback({ overallAccuracy, currentTip, isPlaying, dualFeedb
           </motion.div>
         )}
 
+        {/* MediaPipe Results Display */}
+        {mediaPipeResult && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            className="p-4 rounded-xl bg-cyan-500/10 border border-cyan-500/30 backdrop-blur-sm"
+            style={{
+              boxShadow: '0 0 20px rgba(6, 182, 212, 0.15)'
+            }}
+          >
+            <div className="flex items-start gap-2">
+              <Activity className="w-4 h-4 text-cyan-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <div className="text-xs text-cyan-300 mb-1">MediaPipe Analysis</div>
+                <div className="text-sm text-white/90 leading-tight">
+                  {mediaPipeResult.user_pose_detected && mediaPipeResult.reference_pose_detected ? (
+                    <>
+                      <div className="mb-1">
+                        <span className="text-cyan-400 font-semibold">
+                          {(mediaPipeResult.similarity_score * 100).toFixed(1)}%
+                        </span> pose similarity
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        Processing: {mediaPipeResult.processing_time.toFixed(2)}s
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-gray-400">
+                      {!mediaPipeResult.user_pose_detected && !mediaPipeResult.reference_pose_detected
+                        ? 'No poses detected'
+                        : !mediaPipeResult.user_pose_detected
+                        ? 'User pose not detected'
+                        : 'Reference pose not detected'}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* MediaPipe Error Display */}
+        {mediaPipeError && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-3 rounded-xl bg-orange-500/10 border border-orange-500/30 backdrop-blur-sm"
+          >
+            <div className="text-sm text-orange-400 text-center">
+              MediaPipe analysis failed: {mediaPipeError}
+            </div>
+          </motion.div>
+        )}
 
         {/* Error Display */}
         {dualError && (

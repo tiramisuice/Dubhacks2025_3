@@ -19,16 +19,16 @@ export function ReviewPage({ routineId, segmentId, onPracticeAgain, onBack, onLe
   const [isPlaying, setIsPlaying] = useState(false);
   const [replayProgress, setReplayProgress] = useState(40);
 
-  const overallAccuracy = 82;
-  const timingAccuracy = 79;
-  const poseAccuracy = 86;
-  const consistency = 82;
+  const overallAccuracy = 62;
+  const timingAccuracy = 67;
+  const poseAccuracy = 60;
+  const consistency = 58;
 
   // Mock beat-by-beat performance data (48 beats)
   const beatPerformance = [
-    77, 88, 71, 89, 75, 73, 83, 88, 55, 54, 72, 97, 83, 80, 76, 77,
-    77, 99, 98, 96, 81, 90, 94, 54, 69, 98, 97, 99, 72, 81, 77, 89,
-    94, 96, 95, 76, 88, 71, 76, 73, 91, 81, 73, 79, 99, 83, 98, 71
+    57, 68, 51, 59, 55, 53, 63, 68, 45, 44, 52, 67, 63, 60, 56, 57,
+    57, 69, 68, 66, 61, 60, 64, 44, 49, 68, 67, 69, 52, 61, 57, 59,
+    64, 66, 65, 56, 68, 51, 56, 53, 61, 61, 53, 59, 69, 63, 68, 51
   ];
 
   const getGrade = (score: number) => {
