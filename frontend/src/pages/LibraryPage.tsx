@@ -47,7 +47,7 @@ export function LibraryPage({ onSelectRoutine, onContinue }: LibraryPageProps) {
           <div className="absolute inset-0 bg-gradient-to-r from-purple-500/10 to-pink-500/10 blur-3xl" />
           <div className="relative space-y-4 text-center">
             <h1 className="text-5xl md:text-7xl bg-gradient-to-r from-[var(--neon-purple)] via-[var(--neon-pink)] to-[var(--neon-cyan)] bg-clip-text text-transparent drop-shadow-[0_0_30px_rgba(168,85,247,0.5)]">
-              K-Pop Dance Trainer
+               VibeDance
             </h1>
             <p className="text-lg md:text-xl text-gray-300 max-w-2xl mx-auto">
               Master your favorite choreography with AI-powered coaching

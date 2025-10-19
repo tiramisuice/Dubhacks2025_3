@@ -16,6 +16,8 @@ import os
 import re
 from typing import Dict, List, Optional, Tuple, Union
 from dataclasses import dataclass
+from collections import deque
+import time
 from openai import AsyncOpenAI
 from dotenv import load_dotenv
 import cv2
@@ -52,6 +54,29 @@ class DanceFeedbackResult:
     specific_issues: List[str]  # Detailed issues found
     recommendations: List[str]  # Specific improvement suggestions
 
+@dataclass
+class Tier1Result:
+    """Tier 1 AI analysis result stored for Tier 2 processing"""
+    timestamp: float
+    feedback_text: str
+    similarity_score: float
+    severity: str
+    focus_areas: List[str]
+    is_positive: bool
+    specific_issues: List[str]
+    recommendations: List[str]
+
+@dataclass
+class Tier2AnalysisResult:
+    """Tier 2 AI analysis result for live feedback"""
+    timestamp: float
+    overall_feedback: str
+    overall_similarity_score: float
+    trend_analysis: str
+    key_improvements: List[str]
+    encouragement: str
+    is_positive: bool
+
 class DualSnapshotService:
     """
     Service for capturing and analyzing dual snapshots (webcam + reference video)
@@ -65,6 +90,12 @@ class DualSnapshotService:
         
         self.client = AsyncOpenAI(api_key=api_key)
         self.max_image_size = (640, 480)  # Max dimensions for OpenAI API
+        
+        # Tier 1 results storage (past 3 seconds)
+        self.tier1_results: deque = deque(maxlen=6)  # 6 results = 3 seconds at 0.5s intervals (Tier 1 still runs every 0.5s)
+        self.tier2_analysis_interval = 3.0  # Run Tier 2 analysis every 3 seconds for better readability
+        self.last_tier2_analysis = -999.0  # Initialize to negative value to prevent early triggers
+        self.tier2_analysis_in_progress = False  # Prevent concurrent Tier 2 analyses
         
     def downscale_image_for_openai(self, frame: np.ndarray, max_width: int = 640, max_height: int = 480) -> np.ndarray:
         """
@@ -340,8 +371,12 @@ class DualSnapshotService:
                     is_positive = analysis_data.get('is_positive', True)
                     
                     print(f"[DualSnapshot] Successfully parsed JSON response")
+                    print(f"[DualSnapshot] Extracted feedback_text: {feedback_text}")
+                    print(f"[DualSnapshot] Extracted similarity_score: {similarity_score}")
+                    print(f"[DualSnapshot] Extracted severity: {severity}")
                     
                 else:
+                    print(f"[DualSnapshot] No JSON found in response - using plain text")
                     raise ValueError("No JSON found in response")
                     
             except (json.JSONDecodeError, ValueError, KeyError) as e:
@@ -381,8 +416,8 @@ class DualSnapshotService:
                     recommendations = ["Continue practicing", "Watch the reference video"]
                     positive_feedback = ""
             
-            feedback_result = DanceFeedbackResult(
-                timestamp=snapshot_data.timestamp,
+                feedback_result = DanceFeedbackResult(
+                    timestamp=snapshot_data.timestamp,
                 feedback_text=feedback_text,
                 severity=severity,
                 focus_areas=focus_areas,
@@ -390,20 +425,42 @@ class DualSnapshotService:
                 is_positive=is_positive,
                 specific_issues=specific_issues,
                 recommendations=recommendations
-            )
-            
-            return feedback_result
+                )
+                
+                return feedback_result
                 
         except Exception as e:
             print(f"[DualSnapshot] Error in OpenAI API call: {e}")
+            print(f"[DualSnapshot] Error type: {type(e)}")
+            print(f"[DualSnapshot] Error details: {str(e)}")
             
             # Check if it's a content policy violation
             if "content policy" in str(e).lower() or "safety" in str(e).lower():
-                print("[DualSnapshot] OpenAI blocked due to content policy - returning error")
-                raise Exception("OpenAI content policy violation")
+                print("[DualSnapshot] OpenAI blocked due to content policy - returning fallback")
+                # Return fallback instead of raising exception
+                return DanceFeedbackResult(
+                    timestamp=snapshot_data.timestamp,
+                    feedback_text="Keep practicing! Focus on matching the reference pose.",
+                    severity="medium",
+                    focus_areas=["general"],
+                    similarity_score=0.5,
+                    is_positive=True,
+                    specific_issues=[],
+                    recommendations=["Continue practicing and focus on the reference"]
+                )
             else:
-                print("[DualSnapshot] Other API error - returning error")
-                raise Exception(f"OpenAI API error: {e}")
+                print("[DualSnapshot] Other API error - returning fallback")
+                # Return fallback instead of raising exception
+                return DanceFeedbackResult(
+                    timestamp=snapshot_data.timestamp,
+                    feedback_text="Keep practicing! Focus on matching the reference pose.",
+                    severity="medium",
+                    focus_areas=["general"],
+                    similarity_score=0.5,
+                    is_positive=True,
+                    specific_issues=[],
+                    recommendations=["Continue practicing and focus on the reference"]
+                )
     
     async def process_dual_snapshot(
         self, 
@@ -457,11 +514,212 @@ class DualSnapshotService:
             # Analyze the dual snapshot
             result = await self.analyze_dual_snapshot(snapshot_data)
             
+            if result is None:
+                print(f"[DualSnapshot] analyze_dual_snapshot returned None - creating fallback result")
+                return DanceFeedbackResult(
+                    timestamp=video_timestamp,
+                    feedback_text="Processing error occurred",
+                    severity="medium",
+                    focus_areas=["general"],
+                    similarity_score=0.5,
+                    is_positive=False,
+                    specific_issues=["Processing error occurred"],
+                    recommendations=["Continue practicing and focus on the reference"]
+                )
+            
             return result
             
         except Exception as e:
             print(f"[DualSnapshot] Error processing dual snapshot: {e}")
-            raise e
+            # Return a fallback result instead of raising the exception
+            return DanceFeedbackResult(
+                timestamp=video_timestamp,
+                feedback_text="Processing error occurred",
+                severity="medium",
+                focus_areas=["general"],
+                similarity_score=0.5,
+                is_positive=False,
+                specific_issues=["Processing error occurred"],
+                recommendations=["Continue practicing and focus on the reference"]
+            )
+
+    async def analyze_tier2_feedback(self, tier1_results: List[Tier1Result]) -> Tier2AnalysisResult:
+        """
+        Tier 2 AI analysis: Analyze past 3 seconds of Tier 1 results to provide
+        better live feedback and scoring.
+        """
+        if not tier1_results:
+            return Tier2AnalysisResult(
+                timestamp=time.time(),
+                overall_feedback="Keep practicing!",
+                overall_similarity_score=0.5,
+                trend_analysis="No data available",
+                key_improvements=[],
+                encouragement="You're doing great!",
+                is_positive=True
+            )
+        
+        # Prepare data for Tier 2 analysis
+        analysis_data = []
+        total_similarity = 0
+        
+        for result in tier1_results:
+            analysis_data.append({
+                "timestamp": result.timestamp,
+                "feedback": result.feedback_text,
+                "similarity": result.similarity_score,
+                "focus_areas": result.focus_areas,
+                "issues": result.specific_issues
+            })
+            total_similarity += result.similarity_score
+        
+        avg_similarity = total_similarity / len(tier1_results)
+        
+        # Create prompt for Tier 2 analysis
+        prompt = f"""
+        You are a dance coach analyzing the past 3 seconds of a student's dance practice.
+        
+        Here are the recent analysis results (every 0.5 seconds):
+        {json.dumps(analysis_data, indent=2)}
+        
+        Analyze the trends and provide:
+        1. Overall performance assessment
+        2. Key improvement areas
+        3. Encouragement and motivation
+        4. Trend analysis (getting better/worse/consistent)
+        
+        Respond in JSON format:
+        {{
+            "overall_feedback": "Brief coach feedback (max 30 words)",
+            "overall_similarity_score": {avg_similarity},
+            "trend_analysis": "Brief trend description (max 20 words)",
+            "key_improvements": ["improvement1", "improvement2"],
+            "encouragement": "Motivational message (max 20 words)",
+            "is_positive": true
+        }}
+        """
+        
+        try:
+            response = await self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=200
+            )
+            
+            analysis_text = response.choices[0].message.content
+            print(f"[DualSnapshot] Tier 2 analysis received: {analysis_text}")
+            
+            # Parse JSON response
+            try:
+                # Clean the response text
+                cleaned_text = analysis_text.strip()
+                if cleaned_text.startswith('```json'):
+                    cleaned_text = cleaned_text[7:]
+                if cleaned_text.endswith('```'):
+                    cleaned_text = cleaned_text[:-3]
+                cleaned_text = cleaned_text.strip()
+                
+                # Find JSON in response
+                json_start = cleaned_text.find('{')
+                json_end = cleaned_text.rfind('}') + 1
+                
+                if json_start != -1 and json_end > json_start:
+                    json_text = cleaned_text[json_start:json_end]
+                    analysis_data = json.loads(json_text)
+                    
+                    return Tier2AnalysisResult(
+                        timestamp=time.time(),
+                        overall_feedback=analysis_data.get('overall_feedback', 'Keep practicing!'),
+                        overall_similarity_score=analysis_data.get('overall_similarity_score', avg_similarity),
+                        trend_analysis=analysis_data.get('trend_analysis', 'Consistent performance'),
+                        key_improvements=analysis_data.get('key_improvements', []),
+                        encouragement=analysis_data.get('encouragement', 'Great job!'),
+                        is_positive=analysis_data.get('is_positive', True)
+                    )
+                else:
+                    raise ValueError("No JSON found in response")
+                    
+            except (json.JSONDecodeError, ValueError, KeyError) as e:
+                print(f"[DualSnapshot] Could not parse Tier 2 JSON: {e}")
+                # Fallback response
+                return Tier2AnalysisResult(
+                    timestamp=time.time(),
+                    overall_feedback="Keep practicing!",
+                    overall_similarity_score=avg_similarity,
+                    trend_analysis="Consistent performance",
+                    key_improvements=[],
+                    encouragement="You're doing great!",
+                    is_positive=True
+                )
+                
+        except Exception as e:
+            print(f"[DualSnapshot] Error in Tier 2 analysis: {e}")
+            # Fallback response
+            return Tier2AnalysisResult(
+                timestamp=time.time(),
+                overall_feedback="Keep practicing!",
+                overall_similarity_score=avg_similarity,
+                trend_analysis="Consistent performance",
+                key_improvements=[],
+                encouragement="You're doing great!",
+                is_positive=True
+            )
+
+    async def process_dual_snapshot_with_tier2(self, 
+        webcam_snapshot: str, 
+        reference_video_path: str, 
+        video_timestamp: float,
+        session_id: str
+    ) -> Tuple[DanceFeedbackResult, Optional[Tier2AnalysisResult]]:
+        """
+        Enhanced dual snapshot processing with Tier 2 analysis.
+        Returns both Tier 1 result and Tier 2 analysis (if available).
+        """
+        # Get Tier 1 result
+        tier1_result = await self.process_dual_snapshot(
+            webcam_snapshot, reference_video_path, video_timestamp, session_id
+        )
+        
+        # Store Tier 1 result
+        tier1_stored = Tier1Result(
+                timestamp=video_timestamp,
+            feedback_text=tier1_result.feedback_text,
+            similarity_score=tier1_result.similarity_score,
+            severity=tier1_result.severity,
+            focus_areas=tier1_result.focus_areas,
+            is_positive=tier1_result.is_positive,
+            specific_issues=tier1_result.specific_issues,
+            recommendations=tier1_result.recommendations
+        )
+        
+        self.tier1_results.append(tier1_stored)
+        
+        # Check if we should run Tier 2 analysis (based on video timestamp, not system time)
+        tier2_result = None
+        
+        time_diff = video_timestamp - self.last_tier2_analysis
+        print(f"[DualSnapshot] Tier 2 check: video_time={video_timestamp:.1f}s, last_tier2_time={self.last_tier2_analysis:.1f}s, time_diff={time_diff:.1f}s, interval={self.tier2_analysis_interval}s, results_count={len(self.tier1_results)}")
+        
+        if (time_diff >= self.tier2_analysis_interval and 
+            len(self.tier1_results) >= 6 and
+            not self.tier2_analysis_in_progress):  # Need all 6 results (3 seconds of data) for meaningful analysis
+            
+            print(f"[DualSnapshot] ✅ Running Tier 2 analysis with {len(self.tier1_results)} results (time_diff={time_diff:.1f}s >= {self.tier2_analysis_interval}s)")
+            self.tier2_analysis_in_progress = True
+            try:
+                tier2_result = await self.analyze_tier2_feedback(list(self.tier1_results))
+                self.last_tier2_analysis = video_timestamp  # Use video timestamp, not system time
+                print(f"[DualSnapshot] ✅ Tier 2 analysis completed: {tier2_result.overall_feedback if tier2_result else 'None'}")
+            finally:
+                self.tier2_analysis_in_progress = False
+        else:
+            if self.tier2_analysis_in_progress:
+                print(f"[DualSnapshot] ⏳ Skipping Tier 2 analysis (already in progress)")
+            else:
+                print(f"[DualSnapshot] ⏳ Skipping Tier 2 analysis (time_diff={time_diff:.1f}s < {self.tier2_analysis_interval}s or results_count={len(self.tier1_results)} < 6)")
+        
+        return tier1_result, tier2_result
 
 # Global instance
 dual_snapshot_service = DualSnapshotService()

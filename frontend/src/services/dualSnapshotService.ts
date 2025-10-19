@@ -27,6 +27,21 @@ export interface DualSnapshotResponse {
   recommendations: string[];
   success: boolean;
   error?: string;
+  
+  // Tier 2 analysis fields (optional)
+  tier2_analysis?: {
+    overall_feedback: string;
+    overall_similarity_score: number;
+    trend_analysis: string;
+    key_improvements: string[];
+    encouragement: string;
+    is_positive: boolean;
+  };
+  overall_feedback?: string;
+  overall_similarity_score?: number;
+  trend_analysis?: string;
+  key_improvements?: string[];
+  encouragement?: string;
 }
 
 export interface DualSnapshotOptions {
@@ -158,6 +173,29 @@ class DualSnapshotService {
 
       const result: DualSnapshotResponse = await response.json();
       console.log('[DualSnapshot] Received feedback:', result);
+      
+      // Debug Tier 2 data with more detailed logging
+      console.log('[DualSnapshot] Checking Tier 2 data:');
+      console.log('  - result.overall_feedback:', result.overall_feedback);
+      console.log('  - result.tier2_analysis:', result.tier2_analysis);
+      console.log('  - typeof result.overall_feedback:', typeof result.overall_feedback);
+      console.log('  - result.overall_feedback === null:', result.overall_feedback === null);
+      console.log('  - result.overall_feedback === undefined:', result.overall_feedback === undefined);
+      
+      if (result.tier2_analysis || result.overall_feedback) {
+        console.log('[DualSnapshot] ✅ Tier 2 data received:', {
+          overall_feedback: result.overall_feedback,
+          overall_similarity_score: result.overall_similarity_score,
+          trend_analysis: result.trend_analysis,
+          encouragement: result.encouragement,
+          tier2_analysis: result.tier2_analysis
+        });
+        console.log('[DualSnapshot] Full result object:', JSON.stringify(result, null, 2));
+      } else {
+        console.log('[DualSnapshot] ⏳ No Tier 2 data, using Tier 1 only');
+        console.log('[DualSnapshot] Available fields:', Object.keys(result));
+        console.log('[DualSnapshot] Full result object:', JSON.stringify(result, null, 2));
+      }
 
       return result;
     } catch (error) {

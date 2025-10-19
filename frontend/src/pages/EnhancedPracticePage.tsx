@@ -185,10 +185,14 @@ export function EnhancedPracticePage({ routineId, onReview, onSettings }: Enhanc
 
   // Update overall accuracy when dual feedback is received
   useEffect(() => {
-    if (dualFeedback && dualFeedback.similarity_score !== undefined) {
-      const newAccuracy = Math.round(dualFeedback.similarity_score * 100);
-      setOverallAccuracy(newAccuracy);
-      console.log(`Updated accuracy from dual feedback: ${newAccuracy}%`);
+    if (dualFeedback) {
+      // Use Tier 2 overall_similarity_score if available, otherwise use Tier 1 similarity_score
+      const score = dualFeedback.overall_similarity_score ?? dualFeedback.similarity_score;
+      if (score !== undefined) {
+        const newAccuracy = Math.round(score * 100);
+        setOverallAccuracy(newAccuracy);
+        console.log(`Updated accuracy from dual feedback: ${newAccuracy}% (Tier ${dualFeedback.overall_similarity_score ? '2' : '1'})`);
+      }
     }
   }, [dualFeedback]);
 
@@ -302,12 +306,8 @@ export function EnhancedPracticePage({ routineId, onReview, onSettings }: Enhanc
     return () => clearTimeout(timer);
   }, [countdown, startAutoCapture, hasVideoElement, startDualCapture]);
 
-  // Generate current tip from feedback
-  const currentTip: PracticeTip | undefined = currentFeedback?.live_feedback ? {
-    joint: 'General',
-    message: currentFeedback.live_feedback,
-    beatIndex: Math.floor(videoCurrentTime * 2), // Convert time to approximate beat index
-  } : undefined;
+  // No longer generate currentTip here - LiveFeedback component handles Tier 2 display directly
+  const currentTip: PracticeTip | undefined = undefined;
 
   return (
     <div className="relative h-screen w-full" style={{ backgroundImage: "linear-gradient(rgb(11, 14, 22) 0%, rgb(15, 18, 25) 50%, rgb(18, 22, 38) 100%), linear-gradient(90deg, rgb(255, 255, 255) 0%, rgb(255, 255, 255) 100%)" }}>

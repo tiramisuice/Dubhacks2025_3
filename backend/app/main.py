@@ -157,6 +157,14 @@ class DualSnapshotResponse(BaseModel):
     specific_issues: List[str]
     recommendations: List[str]
     success: bool
+    
+    # Tier 2 analysis fields (optional)
+    tier2_analysis: Optional[Dict] = None
+    overall_feedback: Optional[str] = None
+    overall_similarity_score: Optional[float] = None
+    trend_analysis: Optional[str] = None
+    key_improvements: Optional[List[str]] = None
+    encouragement: Optional[str] = None
     error: Optional[str] = None
 
 
@@ -691,25 +699,56 @@ async def process_dual_snapshot(request: DualSnapshotRequest):
         if not request.reference_video_path:
             raise HTTPException(status_code=400, detail='No reference video path provided')
 
-        # Process the dual snapshot using the dual snapshot service
-        result = await dual_snapshot_service.process_dual_snapshot(
+        # Process the dual snapshot using the enhanced Tier 2 system
+        tier1_result, tier2_result = await dual_snapshot_service.process_dual_snapshot_with_tier2(
             webcam_snapshot=request.webcam_image,
             reference_video_path=request.reference_video_path,
             video_timestamp=request.video_timestamp,
             session_id=request.session_id
         )
         
-        return DualSnapshotResponse(
-            timestamp=result.timestamp,
-            feedback_text=result.feedback_text,
-            severity=result.severity,
-            focus_areas=result.focus_areas,
-            similarity_score=result.similarity_score,
-            is_positive=result.is_positive,
-            specific_issues=result.specific_issues,
-            recommendations=result.recommendations,
-            success=True
-        )
+        # Build response with Tier 2 data if available
+        response_data = {
+            "timestamp": tier1_result.timestamp,
+            "feedback_text": tier1_result.feedback_text,
+            "severity": tier1_result.severity,
+            "focus_areas": tier1_result.focus_areas,
+            "similarity_score": tier1_result.similarity_score,
+            "is_positive": tier1_result.is_positive,
+            "specific_issues": tier1_result.specific_issues,
+            "recommendations": tier1_result.recommendations,
+            "success": True
+        }
+        
+        # Add Tier 2 analysis if available
+        if tier2_result:
+            print(f"[API] 🔍 Tier 2 result details:")
+            print(f"  - overall_feedback: {tier2_result.overall_feedback}")
+            print(f"  - overall_similarity_score: {tier2_result.overall_similarity_score}")
+            print(f"  - trend_analysis: {tier2_result.trend_analysis}")
+            print(f"  - encouragement: {tier2_result.encouragement}")
+            
+            response_data.update({
+                "tier2_analysis": {
+                    "overall_feedback": tier2_result.overall_feedback,
+                    "overall_similarity_score": tier2_result.overall_similarity_score,
+                    "trend_analysis": tier2_result.trend_analysis,
+                    "key_improvements": tier2_result.key_improvements,
+                    "encouragement": tier2_result.encouragement,
+                    "is_positive": tier2_result.is_positive
+                },
+                "overall_feedback": tier2_result.overall_feedback,
+                "overall_similarity_score": tier2_result.overall_similarity_score,
+                "trend_analysis": tier2_result.trend_analysis,
+                "key_improvements": tier2_result.key_improvements,
+                "encouragement": tier2_result.encouragement
+            })
+            print(f"[API] ✅ Returning Tier 2 analysis: {tier2_result.overall_feedback}")
+            print(f"[API] 🔍 Final response_data.overall_feedback: {response_data.get('overall_feedback')}")
+        else:
+            print(f"[API] ⏳ No Tier 2 analysis available, returning Tier 1 only")
+        
+        return DualSnapshotResponse(**response_data)
 
     except Exception as e:
         print(f"[API] Error in dual snapshot processing: {e}")
