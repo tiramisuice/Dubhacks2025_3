@@ -35,32 +35,16 @@ export function ReferenceVideoOverlay({ videoRef, mediaPipeResult, isActive, cla
     return () => window.removeEventListener('resize', updateCanvasSize);
   }, [videoRef]);
 
-  // Draw MediaPipe landmarks
+  // Draw MediaPipe landmarks - DISABLED for reference video
   useEffect(() => {
-    if (!isActive || !mediaPipeResult || !canvasRef.current || !videoRef.current) {
-      // Clear canvas if MediaPipe is not active
-      const canvas = canvasRef.current;
-      if (canvas) {
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-        }
-      }
-      return;
-    }
-
+    // Always clear canvas - reference video overlay is disabled
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Clear previous drawings
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Draw reference pose landmarks if available
-    if (mediaPipeResult.reference_landmarks && mediaPipeResult.reference_pose_detected) {
-      drawPoseLandmarks(ctx, mediaPipeResult.reference_landmarks, canvas.width, canvas.height, '#ff6b6b');
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
     }
-
   }, [isActive, mediaPipeResult, canvasSize]);
 
   const drawPoseLandmarks = (

@@ -248,6 +248,10 @@ export function EnhancedPracticePage({ routineId, onReview, onSettings }: Enhanc
           true // Draw landmarks
         );
         
+        // Force reference pose detection to false since we're not processing reference video
+        result.reference_pose_detected = false;
+        result.reference_landmarks = null;
+        
         setMediaPipeResult(result);
         setMediaPipeError(null);
         

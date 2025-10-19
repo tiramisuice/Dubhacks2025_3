@@ -58,7 +58,7 @@ export function MediaPipeOverlay({ videoRef, mediaPipeResult, isActive, classNam
     // Clear previous drawings
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Draw user pose landmarks if available
+    // Draw ONLY user pose landmarks (no reference landmarks)
     if (mediaPipeResult.user_landmarks && mediaPipeResult.user_pose_detected) {
       console.log('[MediaPipeOverlay] Drawing user landmarks:', mediaPipeResult.user_landmarks.length);
       drawPoseLandmarks(ctx, mediaPipeResult.user_landmarks, canvas.width, canvas.height, '#00ff88');
@@ -69,16 +69,7 @@ export function MediaPipeOverlay({ videoRef, mediaPipeResult, isActive, classNam
       });
     }
 
-    // Draw reference pose landmarks if available
-    if (mediaPipeResult.reference_landmarks && mediaPipeResult.reference_pose_detected) {
-      console.log('[MediaPipeOverlay] Drawing reference landmarks:', mediaPipeResult.reference_landmarks.length);
-      drawPoseLandmarks(ctx, mediaPipeResult.reference_landmarks, canvas.width, canvas.height, '#ff6b6b');
-    } else {
-      console.log('[MediaPipeOverlay] No reference landmarks to draw:', { 
-        hasLandmarks: !!mediaPipeResult.reference_landmarks, 
-        poseDetected: mediaPipeResult.reference_pose_detected 
-      });
-    }
+    // Reference landmarks are NOT drawn on user webcam overlay
 
   }, [isActive, mediaPipeResult, canvasSize]);
 
